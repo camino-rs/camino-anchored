@@ -1,0 +1,41 @@
+[package]
+name = "camino-anchored"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.86"
+description = "UTF-8 paths with explicit resolution and base-relative display"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/camino-rs/camino-anchored"
+documentation = "https://docs.rs/camino-anchored"
+keywords = ["path", "utf8", "relative", "absolute", "cli"]
+categories = ["filesystem", "command-line-interface"]
+include = [
+    "/src/**/*.rs",
+    "/tests/**/*.rs",
+    "/CHANGELOG.md",
+    "/LICENSE-APACHE",
+    "/LICENSE-MIT",
+    "/README.md",
+]
+
+[package.metadata.cargo-sync-rdme.badge.badges]
+license = true
+crates-io = true
+docs-rs = true
+rust-version = true
+
+[lints.rust]
+missing_docs = "warn"
+unreachable_pub = "warn"
+unsafe_code = "forbid"
+
+[lints.clippy]
+must_use_candidate = "warn"
+
+[dependencies]
+camino = "1.2.5"
+
+[dev-dependencies]
+camino-tempfile = "1.4.1"
+hegeltest = "0.44.1"

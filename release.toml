@@ -1,0 +1,14 @@
+sign-tag = true
+# Required for templates below to work
+consolidate-commits = false
+pre-release-commit-message = "[{{crate_name}}] version {{version}}"
+tag-message = "[{{crate_name}}] version {{version}}"
+tag-name = "camino-anchored-{{version}}"
+publish = false
+pre-release-hook = ["just", "generate-readmes"]
+pre-release-replacements = [
+    { file = "CHANGELOG.md", search = "Unreleased", replace = "[{{version}}]", min = 1 },
+    { file = "CHANGELOG.md", search = "ReleaseDate", replace = "{{date}}", min = 1 },
+    { file = "CHANGELOG.md", search = "<!-- next-header -->", replace = "<!-- next-header -->\n## Unreleased - ReleaseDate\n", exactly = 1 },
+    { file = "CHANGELOG.md", search = "<!-- next-url -->", replace = "<!-- next-url -->\n[{{version}}]: https://github.com/camino-rs/camino-anchored/releases/tag/camino-anchored-{{version}}", exactly = 1 },
+]
