@@ -234,10 +234,7 @@ impl fmt::Display for ResolvePathError {
                 write!(f, "cannot resolve {input:?}: path contains a NUL byte")
             }
             ResolvePathErrorKind::Native(NativePathErrorKind::Io(_)) => {
-                write!(
-                    f,
-                    "failed to resolve `{input}` against the current directory"
-                )
+                write!(f, "failed to resolve `{input}` to an absolute path")
             }
             ResolvePathErrorKind::Native(NativePathErrorKind::NonUtf8(error)) => write!(
                 f,
@@ -283,7 +280,7 @@ pub enum ResolvePathErrorKind {
     /// The input path contains a NUL byte.
     ContainsNul,
 
-    /// An attempt to obtain platform-level information failed.
+    /// Native resolution failed, or its result could not be used.
     Native(NativePathErrorKind),
 }
 
@@ -355,7 +352,9 @@ pub enum NativePathErrorKind {
     ///
     /// This should not occur in typical use. On Linux systems with glibc older
     /// than 2.27, this can happen if the current directory is outside the
-    /// process's root directory (for example, after a `chroot` operation).
+    /// process's root directory (for example, after a `chroot` operation):
+    /// `getcwd` returns a path starting with `(unreachable)`. See
+    /// [glibc bug 22679](https://sourceware.org/bugzilla/show_bug.cgi?id=22679).
     Invalid(AbsUtf8PathError),
 }
 
@@ -550,7 +549,7 @@ mod tests {
                 ResolvePathErrorKind::Native(NativePathErrorKind::Io(io::Error::from(
                     io::ErrorKind::NotFound,
                 ))),
-                "failed to resolve `config.toml` against the current directory",
+                "failed to resolve `config.toml` to an absolute path",
                 Some(not_found.as_str()),
             ),
             (

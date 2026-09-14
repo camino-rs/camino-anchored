@@ -21,7 +21,7 @@ use std::fmt;
 /// | --- | --- | --- | --- |
 /// | [`resolve_relative`](Self::resolve_relative) | [`RelUtf8PathBuf`] | interpret a known relative path against this base, using the same base for location and display | no |
 /// | [`resolve_absolute`](Self::resolve_absolute) | [`AbsUtf8PathBuf`] | keep an existing absolute location, but allow displaying it relative to this base | no |
-/// | [`resolve_input`](Self::resolve_input) | [`AsRef<Utf8Path>`] | accept arbitrary input, such as a command-line argument, and automatically choose resolution behavior | yes, on Windows, for drive-relative (`C:foo`) or root-relative (`\foo`) inputs; otherwise, no |
+/// | [`resolve_input`](Self::resolve_input) | [`AsRef<Utf8Path>`] | accept arbitrary input, such as a command-line argument, and automatically choose resolution behavior | yes, on Windows and Cygwin, for drive-relative (`C:foo`) or root-relative (`\foo`) inputs; otherwise, no |
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PathAnchor {
     directory: AbsUtf8PathBuf,
@@ -148,10 +148,12 @@ impl PathAnchor {
 
     /// Resolves a relative path, preserving it for display.
     ///
-    /// On Windows, if `self` is a verbatim path (`\\?\`), or a Windows device
-    /// namespace path (`\\.\`), the relative path is not preserved and an
-    /// absolute path is always displayed. This is because these prefixes affect
-    /// the way paths are interpreted.
+    /// On Windows and Cygwin, if this anchor's directory is a verbatim path
+    /// (`\\?\`) or a device namespace path (`\\.\`), the relative path is not
+    /// preserved and an absolute path is always displayed. Windows does not
+    /// interpret `.` or `..` in such paths, so [`AbsUtf8PathBuf::join`]
+    /// normalizes them lexically, and the relative spelling may no longer
+    /// describe the absolute path.
     ///
     /// # Examples
     ///
@@ -214,14 +216,14 @@ impl PathAnchor {
     ///
     /// * If the path is a well-formed relative path, then use [`Self::resolve_relative`].
     /// * If the path is an absolute path, then use [`Self::resolve_absolute`].
-    /// * On Windows, for drive-relative (`C:foo`) or root-relative
+    /// * On Windows and Cygwin, for drive-relative (`C:foo`) or root-relative
     ///   (`\foo` or `/foo`) paths, use [`AbsUtf8PathBuf::resolve_against_current_dir`],
     ///   which reads process state, then use [`Self::resolve_absolute`].
     /// * Otherwise (for empty inputs or inputs containing a NUL byte), the path is rejected.
     ///
-    /// Returns an error for empty inputs or if native resolution fails,
-    /// including when the current directory is unavailable or the result is not
-    /// valid UTF-8.
+    /// Returns an error for empty inputs, inputs containing a NUL byte, or if
+    /// native resolution fails, including when the current directory is
+    /// unavailable or the result is not valid UTF-8.
     ///
     /// # Examples
     ///

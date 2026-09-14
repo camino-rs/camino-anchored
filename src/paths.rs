@@ -89,8 +89,8 @@ impl AbsUtf8PathBuf {
         }
     }
 
-    /// Resolves a path using the current process state and native platform
-    /// semantics.
+    /// Resolves a path using native platform semantics, consulting the
+    /// current directory for relative inputs.
     ///
     /// This is a thin wrapper around [`std::path::absolute`] — see its
     /// documentation for more information. The most relevant semantics are:

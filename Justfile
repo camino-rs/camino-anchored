@@ -6,11 +6,11 @@ set positional-arguments
 help:
     just --list
 
-# Run `cargo hack --feature-powerset` on crates
+# Run `cargo hack --feature-powerset` on crates.
 powerset *args:
     cargo hack --feature-powerset --workspace "$@"
 
-# Build rustdoc for the crate, treating warnings as errors
+# Build rustdoc for the crate, treating warnings as errors.
 rustdoc *args:
     RUSTDOCFLAGS="${RUSTDOCFLAGS:-} -D warnings" cargo doc --no-deps --all-features "$@"
 

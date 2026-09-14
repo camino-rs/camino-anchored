@@ -4,10 +4,7 @@
 //! Tests for behavior fetching the current directory.
 //!
 //! These tests change the process cwd and rely on nextest's process-per-test
-//! model.
-//!
-//! These tests alter global process state, and depend on nextest's
-//! process-per-test model. (Don't add workarounds for `cargo test`.)
+//! model. (Don't add workarounds for `cargo test`.)
 
 #![cfg(any(unix, windows))]
 
@@ -74,7 +71,7 @@ fn assert_relative_input_ignores_current_dir(dir: &Utf8Path) {
     );
 }
 
-// We exclude macOS because APFS rejects non-UTF-8 names.
+// Apple platforms are excluded because APFS rejects non-UTF-8 names.
 #[cfg(not(target_vendor = "apple"))]
 #[test]
 fn non_utf8_current_dir_is_reported() {
@@ -121,6 +118,8 @@ fn non_utf8_current_dir_is_reported() {
     assert_relative_input_ignores_current_dir(temp.path());
 }
 
+// Windows is excluded because it keeps a handle to the current directory open,
+// so it cannot be deleted while it is the cwd.
 #[cfg(not(windows))]
 #[test]
 fn deleted_current_dir_is_reported() {
@@ -155,7 +154,7 @@ fn deleted_current_dir_is_reported() {
         .expect_err("deleted current directory is an error");
     assert_eq!(
         error.to_string(),
-        "failed to resolve `config.toml` against the current directory"
+        "failed to resolve `config.toml` to an absolute path"
     );
     assert_io_source_kind(&error, io::ErrorKind::NotFound);
 

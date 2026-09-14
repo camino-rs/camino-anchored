@@ -11,8 +11,9 @@
 //! * Relative paths provided over the command line should be resolved against
 //!   the current working directory.
 //! * Internally, one might wish to always use absolute paths.
-//! * When displaying paths, one might wish to use the path the user provided
-//!   if possible, or fall back to a cwd-relative display.
+//! * When displaying paths, one might wish to preserve the spelling of
+//!   relative paths the user provided, display paths within a chosen base
+//!   directory relative to it, and fall back to absolute paths otherwise.
 //!
 //! This crate provides a set of helper types to aid in handling paths
 //! correctly.
