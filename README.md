@@ -18,8 +18,9 @@ manner. In general:
 * Relative paths provided over the command line should be resolved against
   the current working directory.
 * Internally, one might wish to always use absolute paths.
-* When displaying paths, one might wish to use the path the user provided
-  if possible, or fall back to a cwd-relative display.
+* When displaying paths, one might wish to preserve the spelling of
+  relative paths the user provided, display paths within a chosen base
+  directory relative to it, and fall back to absolute paths otherwise.
 
 This crate provides a set of helper types to aid in handling paths
 correctly.
@@ -169,8 +170,7 @@ compatibility.
 Regenerate this README from the crate documentation with `just generate-readmes`.
 This requires `just`, `cargo-sync-rdme`, and the `nightly-2026-09-13` Rust toolchain.
 
-Run `cargo nextest run`, `cargo test --doc`, and `cargo xfmt`. Windows tests should
-also run on Windows; cross-compiling checks types but does not execute native path
-semantics.
+Run `cargo nextest run`, `cargo test --doc`, `cargo clippy --all-targets`, `just rustdoc`,
+and `cargo xfmt`.
 
 Licensed under MIT OR Apache-2.0.
