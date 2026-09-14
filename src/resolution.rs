@@ -390,7 +390,9 @@ impl AnchoredPath {
     /// let output = PathAnchor::new(AbsUtf8PathBuf::resolve_against_current_dir("target").unwrap());
     ///
     /// let input = source.resolve_input("widget/lib.rs").unwrap();
-    /// let relative = input.relative().expect("relative input retains its spelling");
+    /// let relative = input
+    ///     .relative()
+    ///     .expect("relative input retains its spelling");
     ///
     /// // Resolve the same relative location against the output anchor.
     /// let generated = output.resolve_relative(relative.clone());
@@ -403,7 +405,10 @@ impl AnchoredPath {
     /// // A path outside the anchor does not have a relative form.
     /// let outside = source.resolve_absolute(output.directory().clone());
     /// assert_eq!(outside.relative(), None);
-    /// assert_eq!(outside.display().to_string(), output.directory().to_string());
+    /// assert_eq!(
+    ///     outside.display().to_string(),
+    ///     output.directory().to_string()
+    /// );
     /// ```
     #[must_use]
     pub fn relative(&self) -> Option<&RelUtf8PathBuf> {
