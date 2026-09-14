@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- next-header -->
 ## Unreleased - ReleaseDate
 
+## [0.1.0] - 2026-09-14
+
 Initial release.
 
 <!-- next-url -->
+[0.1.0]: https://github.com/camino-rs/camino-anchored/releases/tag/camino-anchored-0.1.0
