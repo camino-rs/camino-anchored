@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `PathAnchor::resolve_relative` now keeps the relative path (returned by `AnchoredPath::relative` and used for display) when the anchor is a Windows verbatim (`\\?\`) or device namespace (`\\.\`) path.
+- `AbsUtf8PathBuf::strip_prefix`, and therefore `PathAnchor::resolve_absolute`, now matches `base` by components. Equal bases with different spellings, such as `/repo//`, `/repo/.`, `C:/repo`, or `c:\repo`, now produce a relative path instead of `None`. Leading `.` components after `base` are no longer included in the result.
 
 ## [0.1.0] - 2026-09-14
 

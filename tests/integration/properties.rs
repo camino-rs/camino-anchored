@@ -76,6 +76,38 @@ fn constructors_preserve_spelling_and_are_mutually_exclusive(tc: hegel::TestCase
     }
 }
 
+/// Predicts what `AbsUtf8PathBuf::strip_prefix` returns when stripping `base`
+/// from `base.join(relative)`, without calling it.
+///
+/// The result is related to `relative`, except that leading `.` components (a
+/// `.` followed by separators or by the end of the text) are removed, along
+/// with the separators after them. This mirrors how `Utf8Path::strip_prefix`
+/// skips such components at the front of its remainder. Everything from the
+/// first other component onwards is kept as written, including trailing
+/// separators and `.` components. If nothing is left, the result is `.`.
+///
+/// On Windows, removing a leading `.\` can expose a drive-relative path (for
+/// example, `.\C:a` becomes `C:a`), which `strip_prefix` rejects. The oracle
+/// returns `None` in that case.
+///
+/// This oracle is only correct for bases drawn from `ROOTS`. Joining onto a
+/// verbatim (`\\?\`) base rewrites the path, so the joined text no longer
+/// contains `relative`.
+fn strip_prefix_oracle(relative: &RelUtf8PathBuf) -> Option<&str> {
+    let mut rest = relative.as_path().as_str();
+    while let Some(after) = rest
+        .strip_prefix('.')
+        .filter(|after| after.is_empty() || after.starts_with(std::path::is_separator))
+    {
+        rest = after.trim_start_matches(std::path::is_separator);
+    }
+    if rest.is_empty() {
+        Some(".")
+    } else {
+        RelUtf8PathBuf::new(rest).ok().map(|_| rest)
+    }
+}
+
 #[hegel::test(test_cases = 1000)]
 fn strip_prefix_inverts_join(tc: hegel::TestCase) {
     let base = tc.draw(absolute_paths().print_as_debug());
@@ -85,7 +117,7 @@ fn strip_prefix_inverts_join(tc: hegel::TestCase) {
     let stripped = joined.strip_prefix(&base);
     assert_eq!(
         stripped.as_ref().map(|path| path.as_path().as_str()),
-        Some(relative.as_path().as_str()),
+        strip_prefix_oracle(&relative),
         "joined: {joined:?}"
     );
 }
@@ -94,6 +126,45 @@ fn strip_prefix_inverts_join(tc: hegel::TestCase) {
 const SEPARATORS: &[&str] = &["/"];
 #[cfg(windows)]
 const SEPARATORS: &[&str] = &["/", "\\"];
+
+#[cfg(unix)]
+const BASE_RESPELLINGS: &[&str] = &["/", "/."];
+#[cfg(windows)]
+const BASE_RESPELLINGS: &[&str] = &["/", "/.", "\\", "\\."];
+
+#[hegel::test(test_cases = 1000)]
+fn strip_prefix_ignores_base_spelling(tc: hegel::TestCase) {
+    let base = tc.draw(absolute_paths().print_as_debug());
+    // Appending a separator to a root-only base changes the root (`/` -> `//`),
+    // so give such bases a normal component.
+    let base = if base.as_path().parent().is_some() {
+        base
+    } else {
+        base.join(&RelUtf8PathBuf::new("a").expect("`a` is a well-formed relative path"))
+    };
+    let extras = tc.draw(
+        generators::vecs(generators::sampled_from(BASE_RESPELLINGS.to_vec()))
+            .min_size(1)
+            .max_size(4),
+    );
+    let relative = tc.draw(relative_paths().print_as_debug());
+
+    let respelled = AbsUtf8PathBuf::new(format!("{}{}", base.as_path(), extras.concat()))
+        .expect("extending an absolute path keeps it absolute");
+    assert_eq!(respelled, base);
+
+    let path = base.join(&relative);
+    let expected = strip_prefix_oracle(&relative);
+    for anchor in [&base, &respelled] {
+        assert_eq!(
+            path.strip_prefix(anchor)
+                .as_ref()
+                .map(|stripped| stripped.as_path().as_str()),
+            expected,
+            "anchor: {anchor:?}, path: {path:?}"
+        );
+    }
+}
 
 #[hegel::test(test_cases = 1000)]
 fn strip_prefix_removes_all_separators_after_base(tc: hegel::TestCase) {
@@ -123,7 +194,7 @@ fn strip_prefix_removes_all_separators_after_base(tc: hegel::TestCase) {
         path.strip_prefix(&base)
             .as_ref()
             .map(|stripped| stripped.as_path().as_str()),
-        Some(relative.as_path().as_str()),
+        strip_prefix_oracle(&relative),
         "path: {path:?}"
     );
 }
