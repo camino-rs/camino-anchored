@@ -338,8 +338,11 @@ impl AbsUtf8PathBuf {
 
     /// Strips `base`, preserving the way `self` is spelled afterwards.
     ///
-    /// Returns `.` if `self` and `base` are spelled the same way, ignoring
-    /// trailing separators on either side.
+    /// This is [`Utf8Path::strip_prefix`], except that trailing separators
+    /// and `.` components in `self` are kept, and `.` is returned if nothing
+    /// remains.
+    /// `base` is matched by components, so `/repo`, `/repo/`, and `/repo/.` all
+    /// strip the same way.
     ///
     /// The result may contain `..` components: for example, stripping `/repo`
     /// from `/repo/../x` returns `../x`.
@@ -350,12 +353,8 @@ impl AbsUtf8PathBuf {
     /// - On Unix, `self` is of the form `//foo` and `base` is of the form `/bar`,
     ///   or vice versa.
     /// - [`Utf8Path::strip_prefix`] returns an error for the pair.
-    /// - [`str::strip_prefix`] returns `None` for the pair (in other words,
-    ///   matching is sensitive to the way paths are spelled).
-    /// - After the separators between `base` and the remainder are removed,
-    ///   the remainder is not a well-formed relative path (for example,
+    /// - The remainder is not a well-formed relative path (for example,
     ///   `C:stream` in `C:\repo\C:stream` on Windows).
-    /// - `base`'s spelling doesn't end at a separator boundary in `self`.
     ///
     /// If the result is `Some`, it is guaranteed that `base.join(&result)`
     /// returns a path equal to `self` when compared as [`AbsUtf8PathBuf`] or
@@ -729,28 +728,6 @@ fn strip_prefix_preserving_spelling(path: &Utf8Path, base: &Utf8Path) -> Option<
         return None;
     }
 
-    // Require that `base` is a component prefix of `path`
-    // (Utf8Path::strip_prefix). We do this check in addition to a string-based
-    // prefix check (str::strip_prefix).
-    //
-    // Why check for the component prefix — doesn't the string-based prefix
-    // subsume it? On typical Unix and Windows platforms, yes, but this isn't
-    // always guaranteed. In particular, on Cygwin:
-    //
-    // * "//server/share" is parsed as POSIX.
-    // * "//server/share\file" is parsed as a Windows UNC path.
-    //
-    // The str::strip_prefix check would accept this pair, but the component
-    // prefix check rejects it.
-    //
-    // We do not read the return value of Utf8Path::strip_prefix, because we
-    // want to preserve the original spelling of `path` as much as possible.
-    // Utf8Path::strip_prefix can end up normalizing away separators and
-    // components at the boundary. For example, if `path` is `/repo/file/` and
-    // `base` is `/repo`, then this returns `file`, not `file/`. We want to
-    // store paths the way they were originally spelled as far as possible.
-    path.strip_prefix(base).ok()?;
-
     #[cfg(unix)]
     if has_double_root(path.as_str()) != has_double_root(base.as_str()) {
         // POSIX permits exactly two leading slashes to name a distinct root.
@@ -758,66 +735,43 @@ fn strip_prefix_preserving_spelling(path: &Utf8Path, base: &Utf8Path) -> Option<
         return None;
     }
 
-    // Strip the prefix from the original string. We _do_ use the return value
-    // of this since it is as close to intent as possible.
-    let suffix = match path.as_str().strip_prefix(base.as_str()) {
-        Some(suffix) => suffix,
-        // `base` may carry trailing separators that `path` lacks (e.g.,
-        // `/repo/` vs `/repo`). Both name the same directory, so treat this
-        // like the exact-match case.
-        None if trim_trailing_separators(path.as_str())
-            == trim_trailing_separators(base.as_str()) =>
-        {
-            ""
-        }
-        None => return None,
+    let remainder = path.strip_prefix(base).ok()?;
+    if remainder.as_str().is_empty() {
+        // The base itself is displayed as the current directory.
+        return Some(RelUtf8PathBuf::new(".").expect("`.` is a well-formed relative path"));
+    }
+
+    // Extend remainder to the path's end to restore trailing separators and `.`
+    // components that Utf8Path::strip_prefix trims.
+    let suffix = substr_start(path.as_str(), remainder.as_str())
+        .and_then(|start| path.as_str().get(start..));
+    let Some(suffix) = suffix else {
+        debug_assert!(false, "remainder {remainder:?} is a subslice of {path:?}");
+        return None;
     };
 
-    // Ensure raw stripping ends at a separator boundary. Note that Component
-    // matching alone is insufficient here: `/a/.` matches `/a/..hidden`
-    // component-wise, but removing the raw `/a/.` prefix would return
-    // `.hidden`, which is wrong.
-    if !suffix.is_empty()
-        && !base.as_str().ends_with(std::path::is_separator)
-        && !suffix.starts_with(std::path::is_separator)
-    {
-        return None;
+    // A suffix can acquire a different interpretation when detached from
+    // its prefix — for example, on Windows, C:\repo\C:stream must not
+    // become the drive-relative C:stream. Require a well-formed relative
+    // path.
+    match RelUtf8PathBuf::new(suffix) {
+        Ok(relative) => Some(relative),
+        Err(error) => match error.kind() {
+            RelUtf8PathErrorKind::Absolute | RelUtf8PathErrorKind::DriveRelative => None,
+            RelUtf8PathErrorKind::Empty
+            | RelUtf8PathErrorKind::ContainsNul
+            | RelUtf8PathErrorKind::RootRelative => {
+                // suffix starts with a non-empty Utf8Path::strip_prefix
+                // remainder, and path is NUL-free, so we should never hit this
+                // case.
+                debug_assert!(
+                    false,
+                    "suffix {suffix:?} is a well-formed relative path: {error}"
+                );
+                None
+            }
+        },
     }
-
-    // Remove only the separators between the base and suffix so that the
-    // display is relative. (Preserve internal and trailing separators.)
-    let suffix = suffix.trim_start_matches(std::path::is_separator);
-    if suffix.is_empty() {
-        // The base itself is displayed as the current directory.
-        Some(RelUtf8PathBuf::new(".").expect("`.` is a well-formed relative path"))
-    } else {
-        // A suffix can acquire a different interpretation when detached from
-        // its prefix — for example, on Windows, C:\repo\C:stream must not
-        // become the drive-relative C:stream. Require a well-formed relative
-        // path.
-        match RelUtf8PathBuf::new(suffix) {
-            Ok(relative) => Some(relative),
-            Err(error) => match error.kind() {
-                RelUtf8PathErrorKind::Absolute | RelUtf8PathErrorKind::DriveRelative => None,
-                RelUtf8PathErrorKind::Empty
-                | RelUtf8PathErrorKind::ContainsNul
-                | RelUtf8PathErrorKind::RootRelative => {
-                    // The suffix is non-empty, comes from a NUL-free path, and
-                    // has had its leading separators trimmed, so we should
-                    // never hit this case.
-                    debug_assert!(
-                        false,
-                        "suffix {suffix:?} is a well-formed relative path: {error}"
-                    );
-                    None
-                }
-            },
-        }
-    }
-}
-
-fn trim_trailing_separators(path: &str) -> &str {
-    path.trim_end_matches(std::path::is_separator)
 }
 
 #[cfg(any(windows, target_os = "cygwin"))]
@@ -843,11 +797,31 @@ fn has_double_root(path: &str) -> bool {
     path.starts_with("//") && !path.starts_with("///")
 }
 
+// Replace with str::substr_range once it is stable (rust-lang/rust#126769).
+// This is the same arithmetic std uses.
+fn substr_start(outer: &str, inner: &str) -> Option<usize> {
+    let start = inner.as_ptr().addr().checked_sub(outer.as_ptr().addr())?;
+    (start.checked_add(inner.len())? <= outer.len()).then_some(start)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::test_helpers::{absolute, assert_resolve_error};
     use std::fmt;
+
+    #[test]
+    fn substr_start_accepts_only_subslices() {
+        let text = "/repo/src/lib.rs";
+        assert_eq!(substr_start(text, &text[6..]), Some(6));
+        assert_eq!(substr_start(text, text), Some(0));
+        assert_eq!(substr_start(text, &text[text.len()..]), Some(text.len()));
+        assert_eq!(substr_start(&text[..5], &text[3..8]), None);
+        assert_eq!(substr_start(&text[6..], text), None);
+
+        let copy = text.to_owned();
+        assert_eq!(substr_start(text, &copy[6..]), None);
+    }
 
     #[cfg(unix)]
     const ABSOLUTE: &str = "/foo/bar";
@@ -1204,18 +1178,31 @@ mod tests {
         for (base, path, expected) in [
             ("/repo/", "/repo/config.toml", Some("config.toml")),
             ("/repo/", "/repo", Some(".")),
-            ("/repo/.", "/repo/config.toml", None),
-            ("/a/./", "/a/b", None),
+            ("/repo/.", "/repo/config.toml", Some("config.toml")),
+            ("/repo//", "/repo/config.toml", Some("config.toml")),
+            ("/a/./", "/a/b", Some("b")),
+            ("/a//b", "/a/b/c", Some("c")),
+            ("/repo", "/repo/./config.toml", Some("config.toml")),
+            ("/repo", "/repo/./.hidden", Some(".hidden")),
+            ("/repo", "/repo/./a/", Some("a/")),
+            ("/repo", "/repo/./", Some(".")),
+            ("/repo/.", "/repo/file/", Some("file/")),
+            ("/repo//", "/repo/a/.", Some("a/.")),
+            ("/a/..", "/a/../b", Some("b")),
+            ("/", "/./a/", Some("a/")),
+            ("//host", "//host/./a/", Some("a/")),
             ("/", "/config.toml", Some("config.toml")),
             ("/", "///a", Some("a")),
+            ("///", "/a", Some("a")),
             ("/", "//host/config.toml", None),
             ("//host", "/host/config.toml", None),
             ("//host", "//host/config.toml", Some("config.toml")),
             ("//", "///a", None),
             ("///", "//a", None),
-            ("/a/.", "/a/.config", None),
-            ("/a/.", "/a/../file", None),
-            ("/a/.", "/a/..hidden", None),
+            ("/a/.", "/a/.config", Some(".config")),
+            ("/a/.", "/a/../file", Some("../file")),
+            ("/a/.", "/a/..hidden", Some("..hidden")),
+            ("/a/b", "/a/bc", None),
         ] {
             assert_strip_prefix(base, path, expected);
         }
@@ -1226,9 +1213,22 @@ mod tests {
     fn strip_prefix_windows() {
         for (base, path, expected) in [
             (r"C:\repo", r"C:\repo\C:stream", None),
+            (r"C:\repo", r"C:\repo\.\C:stream", None),
+            (r"C:\repo", r"C:\repo\.\file", Some("file")),
+            (r"C:\", r"C:\file\", Some(r"file\")),
+            ("C:/", r"C:\file", Some("file")),
+            (r"\\server\share\", r"\\server\share", Some(".")),
+            (r"\\server\share", r"\\SERVER\share\x", None),
             (r"C:\repo", r"D:\repo\config.toml", None),
             (r"C:\repo", r"\\server\share\config.toml", None),
-            (r"C:\repo", r"c:\repo\config.toml", None),
+            (r"C:\repo", r"c:\repo\config.toml", Some("config.toml")),
+            (r"C:/repo", r"C:\repo\config.toml", Some("config.toml")),
+            (r"C:\repo\\", r"C:\repo\config.toml", Some("config.toml")),
+            (
+                r"\\server\share",
+                "//server/share/config.toml",
+                Some("config.toml"),
+            ),
             (r"C:\Repo", r"C:\repo\config.toml", None),
             (r"\\?\C:\repo", r"\\?\C:\repo\file.", None),
             (
