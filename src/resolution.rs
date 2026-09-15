@@ -537,6 +537,19 @@ mod tests {
         }
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn verbatim_anchor_displays_absolute_inputs_relative() {
+        let anchor = base(r"\\?\C:\repo");
+        for (path, expected) in [
+            (r"\\?\C:\repo\src\lib.rs", r"src\lib.rs"),
+            (r"\\?\C:\repo\a/b", r"\\?\C:\repo\a/b"),
+        ] {
+            let resolved = anchor.resolve_absolute(absolute(path));
+            assert_eq!(resolved.display().to_string(), expected, "{path:?}");
+        }
+    }
+
     #[test]
     fn resolve_input_rejects_invalid_input() {
         let base = base(BASE);

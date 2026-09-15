@@ -349,7 +349,9 @@ impl AbsUtf8PathBuf {
     ///
     /// Returns `None` if any of the following conditions are met:
     ///
-    /// - On Windows, either `self` or `base` is a verbatim or device path.
+    /// - Joining the result onto `base` would not give back `self`. This can
+    ///   happen when `base` is a Windows verbatim (`\\?\`) path, because
+    ///   [`Self::join`] normalizes `/`, `.`, and `..` onto such paths.
     /// - On Unix, `self` is of the form `//foo` and `base` is of the form `/bar`,
     ///   or vice versa.
     /// - [`Utf8Path::strip_prefix`] returns an error for the pair.
@@ -383,7 +385,12 @@ impl AbsUtf8PathBuf {
     /// ```
     #[must_use]
     pub fn strip_prefix(&self, base: &AbsUtf8PathBuf) -> Option<RelUtf8PathBuf> {
-        strip_prefix_preserving_spelling(self.as_path(), base.as_path())
+        strip_prefix_preserving_spelling(self.as_path(), base.as_path()).filter(|relative| {
+            // This enforces the documented join guarantee. In practice,
+            // this can only cause rejections for Windows verbatim paths,
+            // where `join` normalizes `/`, `.`, and `..` components.
+            base.join(relative) == *self
+        })
     }
 }
 
@@ -721,13 +728,6 @@ fn path_prefix(path: &Utf8Path) -> Option<Utf8Prefix<'_>> {
 ///
 /// Returns `None` if the path should be displayed as absolute.
 fn strip_prefix_preserving_spelling(path: &Utf8Path, base: &Utf8Path) -> Option<RelUtf8PathBuf> {
-    // If either path or base is a Windows verbatim (\\?\) or device namespace
-    // (\\.\) path, don't try to display relative paths. (Ordinary UNC paths are
-    // fine, though.)
-    if is_verbatim_or_device_path(path) || is_verbatim_or_device_path(base) {
-        return None;
-    }
-
     #[cfg(unix)]
     if has_double_root(path.as_str()) != has_double_root(base.as_str()) {
         // POSIX permits exactly two leading slashes to name a distinct root.
@@ -757,10 +757,21 @@ fn strip_prefix_preserving_spelling(path: &Utf8Path, base: &Utf8Path) -> Option<
     match RelUtf8PathBuf::new(suffix) {
         Ok(relative) => Some(relative),
         Err(error) => match error.kind() {
-            RelUtf8PathErrorKind::Absolute | RelUtf8PathErrorKind::DriveRelative => None,
-            RelUtf8PathErrorKind::Empty
-            | RelUtf8PathErrorKind::ContainsNul
-            | RelUtf8PathErrorKind::RootRelative => {
+            // Reachable only with Windows path prefixes. For example:
+            //
+            // * Absolute: stripping `C:\repo` from `C:\repo\C:\x` leaves
+            //   `C:\x`.
+            // * DriveRelative: stripping `C:\repo` from `C:\repo\C:stream`
+            //   leaves `C:stream`.
+            // * RootRelative: stripping `\\?\C:\repo` from `\\?\C:\repo\/x`
+            //   leaves `/x`, because only `\` separates verbatim components.
+            //   Stripping `\\?\C:` from `\\?\C:\x` leaves `\x`, because std
+            //   emits no root component for a verbatim prefix with nothing
+            //   after it.
+            RelUtf8PathErrorKind::Absolute
+            | RelUtf8PathErrorKind::DriveRelative
+            | RelUtf8PathErrorKind::RootRelative => None,
+            RelUtf8PathErrorKind::Empty | RelUtf8PathErrorKind::ContainsNul => {
                 // suffix starts with a non-empty Utf8Path::strip_prefix
                 // remainder, and path is NUL-free, so we should never hit this
                 // case.
@@ -772,24 +783,6 @@ fn strip_prefix_preserving_spelling(path: &Utf8Path, base: &Utf8Path) -> Option<
             }
         },
     }
-}
-
-#[cfg(any(windows, target_os = "cygwin"))]
-fn is_verbatim_or_device_path(path: &Utf8Path) -> bool {
-    match path_prefix(path) {
-        Some(
-            Utf8Prefix::Verbatim(_)
-            | Utf8Prefix::VerbatimUNC(..)
-            | Utf8Prefix::VerbatimDisk(_)
-            | Utf8Prefix::DeviceNS(_),
-        ) => true,
-        Some(Utf8Prefix::UNC(..) | Utf8Prefix::Disk(_)) | None => false,
-    }
-}
-
-#[cfg(not(any(windows, target_os = "cygwin")))]
-fn is_verbatim_or_device_path(_path: &Utf8Path) -> bool {
-    false
 }
 
 #[cfg(unix)]
@@ -1213,6 +1206,7 @@ mod tests {
     fn strip_prefix_windows() {
         for (base, path, expected) in [
             (r"C:\repo", r"C:\repo\C:stream", None),
+            (r"C:\repo", r"C:\repo\C:\x", None),
             (r"C:\repo", r"C:\repo\.\C:stream", None),
             (r"C:\repo", r"C:\repo\.\file", Some("file")),
             (r"C:\", r"C:\file\", Some(r"file\")),
@@ -1230,13 +1224,33 @@ mod tests {
                 Some("config.toml"),
             ),
             (r"C:\Repo", r"C:\repo\config.toml", None),
-            (r"\\?\C:\repo", r"\\?\C:\repo\file.", None),
+            (r"\\?\C:\repo", r"\\?\C:\repo\file.", Some("file.")),
+            (
+                r"\\?\C:\repo",
+                r"\\?\C:\repo\src\lib.rs",
+                Some(r"src\lib.rs"),
+            ),
+            (r"\\?\C:\repo", r"\\?\C:\repo\x\", Some(r"x\")),
+            (r"\\?\C:\repo", r"\\?\C:\repo\a/b", None),
+            (r"\\?\C:\repo", r"\\?\C:\repo\.\x", None),
+            (r"\\?\C:\repo", r"\\?\C:\repo\x\..", None),
+            (r"\\?\C:\repo", r"\\?\C:\repo\/x", None),
+            (r"\\?\C:\repo", r"\\?\C:\repo\", Some(".")),
+            (r"\\?\C:\repo", r"\\?\C:\repo\.", None),
+            (r"\\?\C:\repo", r"\\?\C:\repo\..\x", None),
+            (r"\\?\C:\", r"\\?\C:\..\x", None),
+            (r"\\?\C:", r"\\?\C:\x", None),
+            (r"\\?\C:", r"\\?\C:\", None),
+            (r"C:\repo", r"\\?\C:\repo\x", None),
+            (r"\\?\C:\repo", r"C:\repo\x", None),
+            (r"\\.\C:\repo", r"\\.\C:\repo\..\x", Some(r"..\x")),
             (
                 r"\\?\UNC\server\share\repo",
                 r"\\?\UNC\server\share\repo\file.",
-                None,
+                Some("file."),
             ),
-            (r"\\.\C:\repo", r"\\.\C:\repo\file.", None),
+            (r"\\.\C:\repo", r"\\.\C:\repo\file.", Some("file.")),
+            (r"\\.\C:\repo", r"\\.\C:\repo\.\x", Some("x")),
         ] {
             assert_strip_prefix(base, path, expected);
         }

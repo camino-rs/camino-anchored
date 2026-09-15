@@ -11,12 +11,16 @@ const TOKENS: &[&str] = &["/", "a", "b", ".", ".."];
 #[cfg(windows)]
 const TOKENS: &[&str] = &["/", "\\", "a", "b", ".", "..", ":", "C"];
 
-// The list of roots on Windows excludes verbatim and device prefixes, which
-// strip_prefix deliberately never shortens.
+// TODO-RAINCLAUDE: ROOTS excludes `\\?\` roots because join normalizes onto them, breaking exact-spelling strip_prefix properties; VERBATIM_ROOTS adds them to properties that don't assume exact spelling.
 #[cfg(unix)]
 const ROOTS: &[&str] = &["/", "//", "///"];
 #[cfg(windows)]
-const ROOTS: &[&str] = &[r"C:\", "C:/", r"\\server\share\"];
+const ROOTS: &[&str] = &[r"C:\", "C:/", r"\\server\share\", r"\\.\C:\"];
+
+#[cfg(unix)]
+const VERBATIM_ROOTS: &[&str] = &[];
+#[cfg(windows)]
+const VERBATIM_ROOTS: &[&str] = &[r"\\?\C:\", r"\\?\UNC\server\share\"];
 
 #[hegel::composite]
 fn path_text(tc: &hegel::TestCase) -> String {
@@ -24,11 +28,61 @@ fn path_text(tc: &hegel::TestCase) -> String {
     tokens.concat()
 }
 
-#[hegel::composite]
-fn absolute_paths(tc: &hegel::TestCase) -> AbsUtf8PathBuf {
-    let root = tc.draw(generators::sampled_from(ROOTS.to_vec()));
+fn draw_absolute_path(tc: &hegel::TestCase, roots: &[&'static str]) -> AbsUtf8PathBuf {
+    let root = tc.draw(generators::sampled_from(roots.to_vec()));
     let rest = tc.draw(path_text());
     AbsUtf8PathBuf::new(format!("{root}{rest}")).expect("a root followed by any text is absolute")
+}
+
+#[hegel::composite]
+fn absolute_paths(tc: &hegel::TestCase) -> AbsUtf8PathBuf {
+    draw_absolute_path(tc, ROOTS)
+}
+
+#[hegel::composite]
+fn any_absolute_paths(tc: &hegel::TestCase) -> AbsUtf8PathBuf {
+    draw_absolute_path(tc, &[ROOTS, VERBATIM_ROOTS].concat())
+}
+
+#[cfg(windows)]
+const VERBATIM_NAMES: &[&str] = &["a", "b", "file.", "file ", "ab:c"];
+
+#[cfg(windows)]
+#[hegel::test(test_cases = 1000)]
+fn strip_prefix_keeps_normal_suffixes_on_verbatim_paths(tc: hegel::TestCase) {
+    let root = tc.draw(generators::sampled_from(VERBATIM_ROOTS.to_vec()));
+    let base_names =
+        tc.draw(generators::vecs(generators::sampled_from(VERBATIM_NAMES.to_vec())).max_size(2));
+    let suffix_names = tc.draw(
+        generators::vecs(generators::sampled_from(VERBATIM_NAMES.to_vec()))
+            .min_size(1)
+            .max_size(3),
+    );
+    let trailing = if tc.draw(generators::booleans()) {
+        "\\"
+    } else {
+        ""
+    };
+
+    let base_text = format!("{root}{}", base_names.join("\\"));
+    let suffix = format!("{}{trailing}", suffix_names.join("\\"));
+    let path_text = if base_text.ends_with('\\') {
+        format!("{base_text}{suffix}")
+    } else {
+        format!("{base_text}\\{suffix}")
+    };
+    let base =
+        AbsUtf8PathBuf::new(base_text).expect("a verbatim root followed by names is absolute");
+    let path =
+        AbsUtf8PathBuf::new(path_text).expect("a verbatim root followed by names is absolute");
+
+    assert_eq!(
+        path.strip_prefix(&base)
+            .as_ref()
+            .map(|stripped| stripped.as_path().as_str()),
+        Some(suffix.as_str()),
+        "base: {base:?}, path: {path:?}"
+    );
 }
 
 #[hegel::composite]
@@ -201,13 +255,13 @@ fn strip_prefix_removes_all_separators_after_base(tc: hegel::TestCase) {
 
 #[hegel::test(test_cases = 1000)]
 fn relative_display_names_the_same_path(tc: hegel::TestCase) {
-    let base = tc.draw(absolute_paths().print_as_debug());
+    let base = tc.draw(any_absolute_paths().print_as_debug());
     let path = if tc.draw(generators::booleans()) {
         let suffix = tc.draw(path_text());
         AbsUtf8PathBuf::new(format!("{}{suffix}", base.as_path()))
             .expect("extending an absolute path keeps it absolute")
     } else {
-        tc.draw(absolute_paths().print_as_debug())
+        tc.draw(any_absolute_paths().print_as_debug())
     };
 
     let resolved = PathAnchor::new(base.clone()).resolve_absolute(path.clone());
@@ -246,7 +300,7 @@ fn relative_display_names_the_same_path(tc: hegel::TestCase) {
 
 #[hegel::test]
 fn resolve_relative_preserves_input_spelling(tc: hegel::TestCase) {
-    let base = tc.draw(absolute_paths().print_as_debug());
+    let base = tc.draw(any_absolute_paths().print_as_debug());
     let relative = tc.draw(relative_paths().print_as_debug());
 
     let resolved = PathAnchor::new(base.clone()).resolve_relative(relative.clone());
@@ -270,7 +324,7 @@ fn resolve_relative_preserves_input_spelling(tc: hegel::TestCase) {
 
 #[hegel::test]
 fn resolve_input_matches_resolve_relative_or_resolve_absolute(tc: hegel::TestCase) {
-    let base = PathAnchor::new(tc.draw(absolute_paths().print_as_debug()));
+    let base = PathAnchor::new(tc.draw(any_absolute_paths().print_as_debug()));
     let input = tc.draw(inputs());
 
     let expected = match RelUtf8PathBuf::new(input.as_str()) {
