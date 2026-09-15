@@ -16,7 +16,7 @@ checksum = "bb1307f12aa967b5a58416e87b3653360e0fd614a016b6e970db08fecbb1b80d"
 
 [[package]]
 name = "camino-anchored"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "camino",
  "camino-tempfile",

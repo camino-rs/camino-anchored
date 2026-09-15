@@ -157,12 +157,12 @@ This crate’s MSRV is **Rust 1.86**. In general we aim for 6 months of Rust
 compatibility.
 
 [`Utf8PathBuf`]: https://docs.rs/camino/1.2.5/camino/struct.Utf8PathBuf.html "struct camino::Utf8PathBuf"
-[`AbsUtf8PathBuf`]: https://docs.rs/camino-anchored/0.1.0/camino_anchored/paths/struct.AbsUtf8PathBuf.html "struct camino_anchored::paths::AbsUtf8PathBuf"
-[`RelUtf8PathBuf`]: https://docs.rs/camino-anchored/0.1.0/camino_anchored/paths/struct.RelUtf8PathBuf.html "struct camino_anchored::paths::RelUtf8PathBuf"
-[`PathAnchor::resolve_input`]: https://docs.rs/camino-anchored/0.1.0/camino_anchored/resolution/struct.PathAnchor.html#method.resolve_input "method camino_anchored::resolution::PathAnchor::resolve_input"
-[`PathAnchor`]: https://docs.rs/camino-anchored/0.1.0/camino_anchored/resolution/struct.PathAnchor.html "struct camino_anchored::resolution::PathAnchor"
-[`AnchoredPath`]: https://docs.rs/camino-anchored/0.1.0/camino_anchored/resolution/struct.AnchoredPath.html "struct camino_anchored::resolution::AnchoredPath"
-[AnchoredPath::display]: https://docs.rs/camino-anchored/0.1.0/camino_anchored/resolution/struct.AnchoredPath.html#method.display "method camino_anchored::resolution::AnchoredPath::display"
+[`AbsUtf8PathBuf`]: https://docs.rs/camino-anchored/0.1.1/camino_anchored/paths/struct.AbsUtf8PathBuf.html "struct camino_anchored::paths::AbsUtf8PathBuf"
+[`RelUtf8PathBuf`]: https://docs.rs/camino-anchored/0.1.1/camino_anchored/paths/struct.RelUtf8PathBuf.html "struct camino_anchored::paths::RelUtf8PathBuf"
+[`PathAnchor::resolve_input`]: https://docs.rs/camino-anchored/0.1.1/camino_anchored/resolution/struct.PathAnchor.html#method.resolve_input "method camino_anchored::resolution::PathAnchor::resolve_input"
+[`PathAnchor`]: https://docs.rs/camino-anchored/0.1.1/camino_anchored/resolution/struct.PathAnchor.html "struct camino_anchored::resolution::PathAnchor"
+[`AnchoredPath`]: https://docs.rs/camino-anchored/0.1.1/camino_anchored/resolution/struct.AnchoredPath.html "struct camino_anchored::resolution::AnchoredPath"
+[AnchoredPath::display]: https://docs.rs/camino-anchored/0.1.1/camino_anchored/resolution/struct.AnchoredPath.html#method.display "method camino_anchored::resolution::AnchoredPath::display"
 <!-- cargo-sync-rdme ]] -->
 
 ## Development
