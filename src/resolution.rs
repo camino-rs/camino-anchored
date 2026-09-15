@@ -3,7 +3,7 @@
 
 use crate::{
     AbsUtf8PathBuf, CurrentDirError, RelUtf8PathBuf, ResolvePathError,
-    paths::{PathClass, classify_path, is_verbatim_or_device_path},
+    paths::{PathClass, classify_path},
 };
 use camino::Utf8Path;
 use std::fmt;
@@ -148,13 +148,6 @@ impl PathAnchor {
 
     /// Resolves a relative path, preserving it for display.
     ///
-    /// On Windows and Cygwin, if this anchor's directory is a verbatim path
-    /// (`\\?\`) or a device namespace path (`\\.\`), the relative path is not
-    /// preserved and an absolute path is always displayed. Windows does not
-    /// interpret `.` or `..` in such paths, so [`AbsUtf8PathBuf::join`]
-    /// normalizes them lexically, and the relative spelling may no longer
-    /// describe the absolute path.
-    ///
     /// # Examples
     ///
     /// ```
@@ -173,7 +166,7 @@ impl PathAnchor {
     pub fn resolve_relative(&self, relative: RelUtf8PathBuf) -> AnchoredPath {
         AnchoredPath {
             absolute: self.directory.join(&relative),
-            relative: (!is_verbatim_or_device_path(self.directory.as_path())).then_some(relative),
+            relative: Some(relative),
         }
     }
 
@@ -369,12 +362,10 @@ impl AnchoredPath {
     ///
     /// This is the form [`Self::display`] shows when it is available.
     ///
-    /// The relative form is `Some` if this path was produced by:
-    ///
-    /// * [`PathAnchor::resolve_relative`], except in the cases documented there
-    ///   where the relative path is not preserved.
-    /// * [`PathAnchor::resolve_absolute`] with a path inside the anchor, as
-    ///   determined by [`AbsUtf8PathBuf::strip_prefix`].
+    /// The relative form is `Some` if this path was produced by
+    /// [`PathAnchor::resolve_relative`], or by [`PathAnchor::resolve_absolute`]
+    /// with a path inside the anchor, as determined by
+    /// [`AbsUtf8PathBuf::strip_prefix`].
     ///
     /// # Notes
     ///
@@ -533,14 +524,16 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    fn verbatim_and_device_bases_display_relative_inputs_as_absolute() {
+    fn verbatim_and_device_bases_preserve_relative_inputs() {
         for root in [r"\\?\C:\repo", r"\\?\UNC\server\share\repo", r"\\.\C:\repo"] {
-            let resolved = base(root).resolve_relative(relative("file/"));
+            let input = relative("../file/");
+            let resolved = base(root).resolve_relative(input.clone());
             assert_eq!(
                 resolved.display().to_string(),
-                resolved.absolute().as_path().as_str(),
+                input.to_string(),
                 "{root:?}"
             );
+            assert_eq!(resolved.relative(), Some(&input), "{root:?}");
         }
     }
 

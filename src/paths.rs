@@ -821,7 +821,7 @@ fn trim_trailing_separators(path: &str) -> &str {
 }
 
 #[cfg(any(windows, target_os = "cygwin"))]
-pub(crate) fn is_verbatim_or_device_path(path: &Utf8Path) -> bool {
+fn is_verbatim_or_device_path(path: &Utf8Path) -> bool {
     match path_prefix(path) {
         Some(
             Utf8Prefix::Verbatim(_)
@@ -834,7 +834,7 @@ pub(crate) fn is_verbatim_or_device_path(path: &Utf8Path) -> bool {
 }
 
 #[cfg(not(any(windows, target_os = "cygwin")))]
-pub(crate) fn is_verbatim_or_device_path(_path: &Utf8Path) -> bool {
+fn is_verbatim_or_device_path(_path: &Utf8Path) -> bool {
     false
 }
 
