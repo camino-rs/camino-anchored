@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- next-header -->
 ## Unreleased - ReleaseDate
 
+### Changed
+
+- `PathAnchor::resolve_relative` now keeps the relative path (returned by `AnchoredPath::relative` and used for display) when the anchor is a Windows verbatim (`\\?\`) or device namespace (`\\.\`) path.
+
 ## [0.1.0] - 2026-09-14
 
 Initial release.
