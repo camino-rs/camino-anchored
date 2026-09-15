@@ -378,7 +378,7 @@ impl AbsUtf8PathBuf {
     /// let relative = base.strip_prefix(&base).unwrap();
     /// assert_eq!(relative.as_path().as_str(), ".");
     ///
-    /// // Paths outside `base` return `None`.
+    /// // Unrelated paths return `None`.
     /// let outside = AbsUtf8PathBuf::resolve_against_current_dir("other.toml").unwrap();
     /// assert_eq!(outside.strip_prefix(&base), None);
     /// ```

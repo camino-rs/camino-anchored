@@ -186,13 +186,13 @@ impl PathAnchor {
     /// let directory = AbsUtf8PathBuf::resolve_against_current_dir("project").unwrap();
     /// let base = PathAnchor::new(directory);
     ///
-    /// // A path within the base can be displayed relative to it.
+    /// // A path under the base is displayed relative to it.
     /// let absolute = AbsUtf8PathBuf::resolve_against_current_dir("project/config.toml").unwrap();
     /// let path = base.resolve_absolute(absolute.clone());
     /// assert_eq!(path.absolute(), &absolute);
     /// assert_eq!(path.display().to_string(), "config.toml");
     ///
-    /// // A path outside the directory is displayed as absolute.
+    /// // An unrelated path is displayed as absolute.
     /// let outside = AbsUtf8PathBuf::resolve_against_current_dir("other.toml").unwrap();
     /// let path = base.resolve_absolute(outside.clone());
     /// assert_eq!(path.display().to_string(), outside.as_path().as_str());
@@ -364,13 +364,13 @@ impl AnchoredPath {
     ///
     /// The relative form is `Some` if this path was produced by
     /// [`PathAnchor::resolve_relative`], or by [`PathAnchor::resolve_absolute`]
-    /// with a path inside the anchor, as determined by
-    /// [`AbsUtf8PathBuf::strip_prefix`].
+    /// when [`AbsUtf8PathBuf::strip_prefix`] returns `Some`.
     ///
     /// # Notes
     ///
-    /// The path is relative to the anchor it was resolved against. This type
-    /// does not record the anchor itself.
+    /// The path is relative to the anchor it was resolved against, and may
+    /// contain `..` components that escape the anchor. This type does not record the
+    /// anchor itself.
     ///
     /// # Examples
     ///
@@ -395,7 +395,7 @@ impl AnchoredPath {
     /// );
     /// assert_eq!(generated.display().to_string(), "widget/lib.rs");
     ///
-    /// // A path outside the anchor does not have a relative form.
+    /// // An unrelated path does not have a relative form.
     /// let outside = source.resolve_absolute(output.directory().clone());
     /// assert_eq!(outside.relative(), None);
     /// assert_eq!(
