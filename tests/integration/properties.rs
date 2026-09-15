@@ -11,7 +11,18 @@ const TOKENS: &[&str] = &["/", "a", "b", ".", ".."];
 #[cfg(windows)]
 const TOKENS: &[&str] = &["/", "\\", "a", "b", ".", "..", ":", "C"];
 
-// TODO-RAINCLAUDE: ROOTS excludes `\\?\` roots because join normalizes onto them, breaking exact-spelling strip_prefix properties; VERBATIM_ROOTS adds them to properties that don't assume exact spelling.
+// On Windows, joining to a verbatim root rewrites the suffix instead of
+// merely appending it:
+//
+//     \\?\C:\repo joined with a/./b   -> \\?\C:\repo\a\b
+//     \\?\C:\repo joined with ../x    -> \\?\C:\x
+//
+// `strip_prefix_oracle` assumes the joined text ends with the suffix as written
+// (so, in the above examples, a/./b and ../x respectively), so properties that
+// use it draw from ROOTS, which excludes verbatim roots.
+//
+// Properties that compare paths rather than spellings draw from both ROOTS and
+// VERBATIM_ROOTS via any_absolute_paths.
 #[cfg(unix)]
 const ROOTS: &[&str] = &["/", "//", "///"];
 #[cfg(windows)]
